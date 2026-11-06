@@ -6,26 +6,18 @@ import os
 app = Flask(__name__)
 
 def get_stream_url(sc_url):
-    """Получает прямой URL аудио-потока с SoundCloud"""
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
-        'extract_flat': False,
+        'format': 'bestaudio[protocol!=m3u8_native]/bestaudio',
     }
-    
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(sc_url, download=False)
-        
-        # Если это плейлист, берем первый трек
         if 'entries' in info:
-            if info['entries']:
-                info = info['entries'][0]
-            else:
+            info = next((e for e in info['entries'] if e), None)
+            if not info:
                 return None, None
-        
-        # Получаем URL потока
-        if 'url' in info:
-            return info['url'], info.get('title', 'Unknown')
+        return info.get('url'), info.get('title', 'Unknown')
         
         # Альтернативный вариант
         formats = info.get('formats', [])
