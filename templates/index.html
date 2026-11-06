@@ -1,1 +1,181 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>My Cloud - Stream</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; font-family: 'Inter', sans-serif; }
+  body { background:#0d0d0d; color:#fff; min-height:100vh; }
+  header {
+    background:#111; padding:20px 40px; border-bottom:1px solid #222;
+    display:flex; align-items:center; gap:20px;
+  }
+  .logo { color:#ff5500; font-size:24px; font-weight:800; }
+  .url-input {
+    flex:1; padding:12px 16px; background:#1a1a1a; border:1px solid #333;
+    border-radius:8px; color:#fff; font-size:14px; outline:none;
+  }
+  .url-input:focus { border-color:#ff5500; }
+  .load-btn {
+    padding:12px 24px; background:#ff5500; border:none; border-radius:8px;
+    color:#fff; font-weight:600; cursor:pointer; font-size:14px;
+  }
+  .load-btn:hover { background:#ff6b1a; }
+  .container { max-width:900px; margin:40px auto; padding:0 20px; }
+  .loading { text-align:center; padding:40px; color:#666; display:none; }
+  .loading.active { display:block; }
+  .track {
+    display:flex; align-items:center; padding:14px 18px; margin-bottom:8px;
+    background:#161616; border-radius:8px; cursor:pointer; transition:0.15s;
+    border:1px solid transparent;
+  }
+  .track:hover { background:#1c1c1c; border-color:#2a2a2a; }
+  .track.playing { background:#1f1108; border-color:#ff5500; }
+  .track .num { color:#555; width:30px; font-size:14px; }
+  .track .name { flex:1; font-size:15px; }
+  .track .duration { color:#888; font-size:13px; margin-right:15px; }
+  .track .play-btn {
+    width:32px; height:32px; border-radius:50%; background:#ff5500;
+    display:flex; align-items:center; justify-content:center;
+    opacity:0; transition:0.15s;
+  }
+  .track:hover .play-btn, .track.playing .play-btn { opacity:1; }
+  .player {
+    position:fixed; bottom:0; left:0; right:0; background:#111;
+    border-top:1px solid #222; padding:14px 30px; display:none;
+    align-items:center; gap:20px;
+  }
+  .player.active { display:flex; }
+  .player .info { width:200px; }
+  .player .info .t { font-size:14px; font-weight:600; }
+  .player .info .a { font-size:12px; color:#888; }
+  .controls { flex:1; display:flex; flex-direction:column; align-items:center; gap:8px; }
+  .play-pause {
+    width:40px; height:40px; border-radius:50%; background:#ff5500; border:none;
+    cursor:pointer; color:#fff; font-size:16px;
+  }
+  .progress { width:100%; height:4px; background:#333; border-radius:2px; cursor:pointer; position:relative; }
+  .progress-fill { height:100%; background:#ff5500; border-radius:2px; width:0%; }
+  .time { font-size:11px; color:#888; }
+</style>
+</head>
+<body>
 
+<header>
+  <div class="logo">☁ My Cloud</div>
+  <input type="text" class="url-input" id="urlInput" placeholder="Вставь ссылку на трек или плейлист SoundCloud...">
+  <button class="load-btn" id="loadBtn">Загрузить</button>
+</header>
+
+<div class="container">
+  <div class="loading" id="loading">⏳ Загружаем...</div>
+  <div id="list"></div>
+</div>
+
+<div class="player" id="player">
+  <div class="info">
+    <div class="t" id="pTitle">—</div>
+    <div class="a">SoundCloud Stream</div>
+  </div>
+  <div class="controls">
+    <button class="play-pause" id="pp">▶</button>
+    <div class="progress" id="prog"><div class="progress-fill" id="fill"></div></div>
+    <div class="time"><span id="cur">0:00</span> / <span id="dur">0:00</span></div>
+  </div>
+</div>
+
+<audio id="audio"></audio>
+
+<script>
+const audio = document.getElementById('audio');
+const list = document.getElementById('list');
+const player = document.getElementById('player');
+const loading = document.getElementById('loading');
+const urlInput = document.getElementById('urlInput');
+const loadBtn = document.getElementById('loadBtn');
+let tracks = [], current = -1;
+
+async function loadPlaylist(url) {
+  loading.classList.add('active');
+  list.innerHTML = '';
+  
+  try {
+    const res = await fetch(`/api/info?url=${encodeURIComponent(url)}`);
+    const data = await res.json();
+    
+    if (data.type === 'playlist') {
+      tracks = data.tracks;
+    } else {
+      tracks = [data];
+    }
+    
+    render();
+  } catch (e) {
+    alert('Ошибка загрузки: ' + e.message);
+  } finally {
+    loading.classList.remove('active');
+  }
+}
+
+function render() {
+  list.innerHTML = tracks.map((t, i) => `
+    <div class="track" data-i="${i}">
+      <div class="num">${i+1}</div>
+      <div class="name">${t.title}</div>
+      <div class="duration">${fmt(t.duration)}</div>
+      <div class="play-btn">▶</div>
+    </div>
+  `).join('');
+  
+  document.querySelectorAll('.track').forEach(el => {
+    el.onclick = () => play(+el.dataset.i);
+  });
+}
+
+function play(i) {
+  current = i;
+  const track = tracks[i];
+  audio.src = `/api/stream?url=${encodeURIComponent(track.url)}`;
+  audio.play();
+  document.getElementById('pTitle').textContent = track.title;
+  player.classList.add('active');
+  document.querySelectorAll('.track').forEach((el, idx) => {
+    el.classList.toggle('playing', idx === i);
+  });
+}
+
+document.getElementById('pp').onclick = () => {
+  if (audio.paused) audio.play(); else audio.pause();
+};
+audio.onplay = () => document.getElementById('pp').textContent = '⏸';
+audio.onpause = () => document.getElementById('pp').textContent = '▶';
+audio.ontimeupdate = () => {
+  const pct = (audio.currentTime / audio.duration) * 100 || 0;
+  document.getElementById('fill').style.width = pct + '%';
+  document.getElementById('cur').textContent = fmt(audio.currentTime);
+  document.getElementById('dur').textContent = fmt(audio.duration);
+};
+audio.onended = () => {
+  if (current < tracks.length - 1) play(current + 1);
+};
+document.getElementById('prog').onclick = (e) => {
+  const r = e.currentTarget.getBoundingClientRect();
+  audio.currentTime = ((e.clientX - r.left) / r.width) * audio.duration;
+};
+
+function fmt(s) {
+  if (!s) return '0:00';
+  const m = Math.floor(s/60), sec = Math.floor(s%60);
+  return `${m}:${sec<10?'0':''}${sec}`;
+}
+
+loadBtn.onclick = () => {
+  const url = urlInput.value.trim();
+  if (url) loadPlaylist(url);
+};
+urlInput.onkeypress = (e) => {
+  if (e.key === 'Enter') loadBtn.click();
+};
+</script>
+</body>
+</html>
